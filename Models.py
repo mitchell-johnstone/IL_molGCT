@@ -7,8 +7,10 @@ from Sublayers import Norm
 import copy
 import numpy as np
 
+
 def get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+
 
 class Encoder(nn.Module):
     def __init__(self, opt, vocab_size, d_model, N, heads, dropout):
@@ -43,6 +45,7 @@ class Encoder(nn.Module):
         eps = torch.randn_like(std)
         return eps.mul(std).add(mu)
     
+
 class Decoder(nn.Module):
     def __init__(self, opt, vocab_size, d_model, N, heads, dropout):
         super().__init__()
@@ -75,6 +78,7 @@ class Decoder(nn.Module):
             x = self.layers[i](x, e_outputs, cond_input, src_mask, trg_mask)
         return self.norm(x)
 
+
 class Transformer(nn.Module):
     def __init__(self, opt, src_vocab, trg_vocab):
         super().__init__()
@@ -85,6 +89,7 @@ class Transformer(nn.Module):
         self.out = nn.Linear(opt.d_model, trg_vocab)
         if self.use_cond2dec == True:
             self.prop_fc = nn.Linear(trg_vocab, 1)
+
     def forward(self, src, trg, cond, src_mask, trg_mask):
         z, mu, log_var = self.encoder(src, cond, src_mask)
         d_output = self.decoder(trg, z, cond, src_mask, trg_mask)
@@ -95,11 +100,14 @@ class Transformer(nn.Module):
             output_prop, output_mol = torch.zeros(output.size(0), 3, 1), output
         return output_prop, output_mol, mu, log_var, z
 
+
 def get_model(opt, src_vocab, trg_vocab):
     assert opt.d_model % opt.heads == 0
     assert opt.dropout < 1
 
     model = Transformer(opt, src_vocab, trg_vocab)
+    model.to(opt.device)
+
     if opt.print_model == True:
         print("model structure:\n", model)
 
@@ -110,8 +118,5 @@ def get_model(opt, src_vocab, trg_vocab):
         for p in model.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-
-    if opt.device == 0:
-        model = model.cuda()
 
     return model

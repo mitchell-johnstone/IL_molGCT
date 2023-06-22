@@ -98,6 +98,7 @@ dependencies:
     - thinc
     - threadpoolctl
     - torchtext==0.6.0
+    - tqdm
     - typer
     - urllib3
     - wasabi

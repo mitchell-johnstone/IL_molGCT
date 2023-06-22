@@ -11,11 +11,11 @@ def init_vars(cond, model, SRC, TRG, toklen, opt, z):
     src_mask = (torch.ones(1, 1, toklen) != 0)
     trg_mask = nopeak_mask(1, opt)
 
-    trg_in = torch.LongTensor([[init_tok]])
+    trg_in = torch.LongTensor([[init_tok]], device=opt.device)
 
 
     if opt.device == 0:
-        trg_in, z, src_mask, trg_mask = trg_in.cuda(), z.cuda(), src_mask.cuda(), trg_mask.cuda()
+        z, src_mask, trg_mask = z.cuda(), src_mask.cuda(), trg_mask.cuda()
 
     if opt.use_cond2dec == True:
         output_mol = model.out(model.decoder(trg_in, z, cond, src_mask, trg_mask))[:, 3:, :]
@@ -26,15 +26,11 @@ def init_vars(cond, model, SRC, TRG, toklen, opt, z):
     probs, ix = out_mol[:, -1].data.topk(opt.k)
     log_scores = torch.Tensor([math.log(prob) for prob in probs.data[0]]).unsqueeze(0)
     
-    outputs = torch.zeros(opt.k, opt.max_strlen).long()
-    if opt.device == 0:
-        outputs = outputs.cuda()
+    outputs = torch.zeros(opt.k, opt.max_strlen, device=opt.device).long()
     outputs[:, 0] = init_tok
     outputs[:, 1] = ix[0]
 
-    e_outputs = torch.zeros(opt.k, z.size(-2), z.size(-1))
-    if opt.device == 0:
-        e_outputs = e_outputs.cuda()
+    e_outputs = torch.zeros(opt.k, z.size(-2), z.size(-1), device=opt.device)
     e_outputs[:, :] = z[0]
     
     return outputs, e_outputs, log_scores
