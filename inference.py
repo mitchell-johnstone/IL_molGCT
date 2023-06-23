@@ -174,7 +174,7 @@ def inference(opt, model, SRC, TRG):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-load_weights', type=str, default="saved_model")
+    parser.add_argument('-load_weights', type=str, default="weights")
     parser.add_argument('-load_traindata', type=str, default="data/moses/prop_temp.csv")
     parser.add_argument('-load_toklendata', type=str, default='toklen_list.csv')
     parser.add_argument('-k', type=int, default=4)
@@ -201,7 +201,8 @@ def main():
     
     opt = parser.parse_args()
 
-    opt.device = 0 if opt.no_cuda is False else -1
+    print("Number of GPUS to use: ", torch.cuda.device_count())
+    opt.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     assert opt.k > 0
     assert opt.max_strlen > 10
