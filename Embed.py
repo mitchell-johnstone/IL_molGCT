@@ -37,7 +37,7 @@ class PositionalEncoder(nn.Module):
         # add constant to embedding
         seq_len = x.size(1)
         pe = Variable(self.pe[:, :seq_len], requires_grad=False)
-        if x.is_cuda:
-            pe.cuda()
+#        if x.is_cuda:
+#            pe.cuda()
         x = x + pe
         return self.dropout(x)

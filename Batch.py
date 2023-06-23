@@ -1,7 +1,8 @@
 import torch
-from torchtext import data
 import numpy as np
+from torchtext import data
 from torch.autograd import Variable
+from functools import partial
 
 
 def nopeak_mask(size, opt):
@@ -15,29 +16,28 @@ def nopeak_mask(size, opt):
         lower_mask = np.concatenate([cond_mask_lowerleft, np_mask], axis=2)
         np_mask = np.concatenate([upper_mask, lower_mask], axis=1)
     np_mask = Variable(torch.from_numpy(np_mask) == 0)
-    if opt.device == 0:
-      np_mask = np_mask.cuda()
     return np_mask
+
 
 def create_masks(src, trg, cond, opt):
     torch.set_printoptions(profile="full")
     src_mask = (src != opt.src_pad).unsqueeze(-2)
     cond_mask = torch.unsqueeze(cond, -2)
     cond_mask = torch.ones_like(cond_mask, dtype=bool)
-    src_mask = torch.cat([cond_mask, src_mask], dim=2)
+    src_mask = torch.cat([cond_mask, src_mask], dim=2).to(opt.device)
 
     if trg is not None:
         trg_mask = (trg != opt.trg_pad).unsqueeze(-2)
         if opt.use_cond2dec == True:
             trg_mask = torch.cat([cond_mask, trg_mask], dim=2)
         np_mask = nopeak_mask(trg.size(1), opt)
-        if trg.is_cuda:
-            np_mask.cuda()
         trg_mask = trg_mask & np_mask
+        trg_mask = trg_mask.to(opt.device)
 
     else:
         trg_mask = None
     return src_mask, trg_mask
+
 
 # patch on Torchtext's batching process that makes it more efficient
 # from http://nlp.seas.harvard.edu/2018/04/03/attention.html#position-wise-feed-forward-networks

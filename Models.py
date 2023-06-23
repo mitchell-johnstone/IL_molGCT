@@ -97,7 +97,7 @@ class Transformer(nn.Module):
         if self.use_cond2dec == True:
             output_prop, output_mol = self.prop_fc(output[:, :3, :]), output[:, 3:, :]
         else:
-            output_prop, output_mol = torch.zeros(output.size(0), 3, 1), output
+            output_prop, output_mol = torch.zeros(output.size(0), 3, 1).to(output.device), output
         return output_prop, output_mol, mu, log_var, z
 
 
@@ -106,7 +106,6 @@ def get_model(opt, src_vocab, trg_vocab):
     assert opt.dropout < 1
 
     model = Transformer(opt, src_vocab, trg_vocab)
-    model.to(opt.device)
 
     if opt.print_model == True:
         print("model structure:\n", model)

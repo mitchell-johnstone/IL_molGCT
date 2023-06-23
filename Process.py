@@ -69,13 +69,14 @@ def create_dataset(opt, SRC, TRG, PROP, tr_te):
     # masking data longer than max_strlen
     if tr_te == "tr":
         print("\n* creating [train] dataset and iterator... ")
-        raw_data = {'src': [line for line in opt.src_data], 'trg': [line for line in opt.trg_data]}
+        raw_data = {'src': list(opt.src_data), 'trg': list(opt.trg_data)}
     if tr_te == "te":
         print("\n* creating [test] dataset and iterator... ")
-        raw_data = {'src': [line for line in opt.src_data_te], 'trg': [line for line in opt.trg_data_te]}
+        raw_data = {'src': list(opt.src_data_te), 'trg': list(opt.trg_data_te)}
     df = pd.DataFrame(raw_data, columns=["src", "trg"])
     df = pd.concat([df, PROP], axis=1)
 
+    ################ TESTING THE CODE #####################
     # if tr_te == "tr":  #for code test
     #     df = df[:30000]
     # if tr_te == "te":
@@ -101,6 +102,7 @@ def create_dataset(opt, SRC, TRG, PROP, tr_te):
     data_fields = [('src', SRC), ('trg', TRG), ('logP', logP), ('tPSA', tPSA), ('QED', QED)]
 
     if tr_te == "tr":
+
         toklenList = []
         train = data.TabularDataset('./DB_transformer_temp.csv', format='csv', fields=data_fields, skip_header=True)
         for i in range(len(train)):
@@ -114,9 +116,10 @@ def create_dataset(opt, SRC, TRG, PROP, tr_te):
         if opt.verbose == True:
             print("     - tokenized testing sample 0:", vars(train[0]))
 
-    train_iter = MyIterator(train, batch_size=opt.batchsize, device=opt.device,
-                            repeat=False, sort_key=lambda x: (len(x.src), len(x.trg), len(x.logP), len(x.tPSA), len(x.QED)),
-                            batch_size_fn=batch_size_fn, train=True, shuffle=True)
+    # put our data into an batching iterator
+    train_iter = MyIterator(train, batch_size=opt.batchsize, repeat=False, sort_key=lambda x: (len(x.src), len(x.trg), len(x.logP), len(x.tPSA), len(x.QED)), batch_size_fn=batch_size_fn, train=True, shuffle=True)
+#    train_iter = MyIterator(train, batch_size=opt.batchsize, device=opt.device, repeat=False, sort_key=lambda x: (len(x.src), len(x.trg), len(x.logP), len(x.tPSA), len(x.QED)), batch_size_fn=batch_size_fn, train=True, shuffle=True)
+
     try:
         os.remove('DB_transformer_temp.csv')
     except:

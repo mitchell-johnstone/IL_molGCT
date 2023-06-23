@@ -38,6 +38,14 @@ def loss_function(opt, beta, preds_prop, preds_mol, ys_cond, ys_mol, mu, log_var
 def train_model(model, opt):
     global robustScaler
     print("training model...")
+
+    if torch.cuda.is_available():
+        # Parallelize the model to use multiple GPUS
+        model = DataParallel(model)
+
+    # put model and data onto the same device
+    model = model.to(opt.device)
+
     model.train()
 
     if opt.checkpoint > 0:
@@ -54,7 +62,6 @@ def train_model(model, opt):
     for epoch in tqdm(range(opt.epochs), desc="Epochs", position=0):
         total_loss,    RCE_mol_loss,    RCE_prop_loss,    KLD_loss    = 0, 0, 0, 0
         total_loss_te, RCE_mol_loss_te, RCE_prop_loss_te, KLD_loss_te = 0, 0, 0, 0
-        accum_train_printevery_n, accum_test_n, accum_test_printevery_n = 0, 0, 0
 
         if opt.checkpoint > 0:
             torch.save(model.state_dict(), 'weights/model_weights')
@@ -69,15 +76,18 @@ def train_model(model, opt):
         # Training
         for batch in tqdm(opt.train, desc="Training Loop", total=opt.train_len, leave=False):
             current_step += 1
-            src = batch.src.transpose(0, 1).to(opt.device)
-            trg = batch.trg.transpose(0, 1).to(opt.device)
+            src = batch.src.transpose(0, 1)
+            trg = batch.trg.transpose(0, 1)
             trg_input = trg[:, :-1]
 
-            cond = torch.stack([batch.logP, batch.tPSA, batch.QED]).transpose(0, 1).to(opt.device)
+            cond = torch.stack([batch.logP, batch.tPSA, batch.QED]).transpose(0, 1)
 
             src_mask, trg_mask = create_masks(src, trg_input, cond, opt)
+            src_mask = src_mask
+            trg_mask = trg_mask
+
             preds_prop, preds_mol, mu, log_var, z = model(src, trg_input, cond, src_mask, trg_mask)
-            ys_mol = trg[:, 1:].contiguous().view(-1)
+            ys_mol = trg[:, 1:].contiguous().view(-1).to(opt.device)
             ys_cond = torch.unsqueeze(cond, 2).contiguous().view(-1, opt.cond_dim, 1)
 
             opt.optimizer.zero_grad()
@@ -122,14 +132,14 @@ def train_model(model, opt):
 
             with torch.no_grad():
                 for batch in tqdm(opt.test, desc="Testing Loop", total=opt.test_len, leave=False):
-                    src = batch.src.transpose(0, 1).to(opt.device)
-                    trg = batch.trg.transpose(0, 1).to(opt.device)
+                    src = batch.src.transpose(0, 1)
+                    trg = batch.trg.transpose(0, 1)
                     trg_input = trg[:, :-1]
-                    cond = torch.stack([batch.logP, batch.tPSA, batch.QED]).transpose(0, 1).to(opt.device)
+                    cond = torch.stack([batch.logP, batch.tPSA, batch.QED]).transpose(0, 1)
 
                     src_mask, trg_mask = create_masks(src, trg_input, cond, opt)
                     preds_prop, preds_mol, mu, log_var, z = model(src, trg_input, cond, src_mask, trg_mask)
-                    ys_mol = trg[:, 1:].contiguous().view(-1)
+                    ys_mol = trg[:, 1:].contiguous().view(-1).to(opt.device)
                     ys_cond = torch.unsqueeze(cond, 2).contiguous().view(-1, opt.cond_dim, 1)
 
                     loss_te, RCE_mol_te, RCE_prop_te, KLD_te = loss_function(opt, beta, preds_prop, preds_mol, ys_cond, ys_mol, mu, log_var)
@@ -169,17 +179,12 @@ def get_program_arguments():
     parser.add_argument('-src_data_te', type=str, default='data/moses/test.txt')
     parser.add_argument('-trg_data', type=str, default='data/moses/train.txt')
     parser.add_argument('-trg_data_te', type=str, default='data/moses/test.txt')
-#     parser.add_argument('-src_data', type=str, default='data/moses/tmp_train.txt')
-#     parser.add_argument('-src_data_te', type=str, default='data/moses/tmp_test.txt')
-#     parser.add_argument('-trg_data', type=str, default='data/moses/tmp_train.txt')
-#     parser.add_argument('-trg_data_te', type=str, default='data/moses/tmp_test.txt')
     parser.add_argument('-lang_format', type=str, default='SMILES')
     calProp = not os.path.isfile("data/moses/prop_temp.csv") or not os.path.isfile("data/moses/prop_temp_te.csv")
     parser.add_argument('-calProp', type=bool, default=calProp) #if prop_temp.csv and prop_temp_te.csv exist, set False
 
     # Learning hyperparameters
     parser.add_argument('-epochs', type=int, default=1)
-    parser.add_argument('-no_cuda', type=str, default=False)
     # parser.add_argument('-lr_scheduler', type=str, default="SGDR", help="WarmUpDefault, SGDR")
     parser.add_argument('-lr_scheduler', type=str, default="WarmUpDefault", help="WarmUpDefault, SGDR")
     parser.add_argument('-lr_WarmUpSteps', type=int, default=8000, help="only for WarmUpDefault")
@@ -222,14 +227,9 @@ def get_program_arguments():
 
 def main():
     opt = get_program_arguments()
-
-#     num_gpus = torch.cuda.device_count()
-#     print("NUM GPUS: ", num_gpus)
-#     opt.gpus = list(range(num_gpus))
-
-    opt.device = 0 if opt.no_cuda is False else -1
-    if opt.device == 0:
-        assert torch.cuda.is_available()
+    
+    print("Number of GPUS to use: ", torch.cuda.device_count())
+    opt.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     read_data(opt)
 
