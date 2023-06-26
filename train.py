@@ -46,12 +46,10 @@ def train_model(model, opt):
     # put model and data onto the same device
     model = model.to(opt.device)
 
-    model.train()
-
     if opt.checkpoint > 0:
         cptime = time.time()
 
-    if opt.imp_test:
+    if opt.imp_test is True:
         history_df = pd.DataFrame(columns=["epoch", "beta", "lr", "total_loss", "total_loss_te", "RCE_mol_loss", "RCE_mol_loss_te", "RCE_prop_loss", "RCE_prop_loss_te", "KLD_loss", "KLD_loss_te"])
     else:
         history_df = pd.DataFrame(columns=["epoch", "beta", "lr", "total_loss", "RCE_mol_loss", "RCE_prop_loss", "KLD_loss"])
@@ -74,7 +72,8 @@ def train_model(model, opt):
             beta = 1
 
         # Training
-        for batch in tqdm(opt.train, desc="Training Loop", total=opt.train_len, leave=False):
+        model.train()
+        for batch in tqdm(opt.train, desc="Training Loop", total=opt.train_len, leave=False, miniters=opt.train_len//100, maxinterval=float("inf")):
             current_step += 1
             src = batch.src.transpose(0, 1)
             trg = batch.trg.transpose(0, 1)
@@ -127,11 +126,11 @@ def train_model(model, opt):
         history_dict['KLD_loss'] = KLD_loss / len(opt.train.dataset)
 
         # Test
-        if opt.imp_test == True:
+        if opt.imp_test is True:
             model.eval()
 
             with torch.no_grad():
-                for batch in tqdm(opt.test, desc="Testing Loop", total=opt.test_len, leave=False):
+                for batch in tqdm(opt.test, desc="Testing Loop", total=opt.test_len, leave=False, miniters=opt.test_len//100, maxinterval=float("inf")):
                     src = batch.src.transpose(0, 1)
                     trg = batch.trg.transpose(0, 1)
                     trg_input = trg[:, :-1]
@@ -164,6 +163,11 @@ def train_model(model, opt):
         # torch.save(model.state_dict(), f'{opt.save_folder_name}/epo{epoch+1}/model_weights')
         # joblib.dump(robustScaler, f'{opt.save_folder_name}/epo{epoch+1}/scaler.pkl')
 
+        dst = 'weights'
+        os.makedirs(dst, exist_ok=True)
+        print(f'saving weights to {dst}/...')
+        torch.save(model.state_dict(), f'{dst}/model_weights')
+
     # Export train/test history
     history_df.to_csv(f'trHist_lat={opt.latent_dim}_{time.strftime("%Y%m%d")}.csv', index=False)
 
@@ -184,7 +188,7 @@ def get_program_arguments():
     parser.add_argument('-calProp', type=bool, default=calProp) #if prop_temp.csv and prop_temp_te.csv exist, set False
 
     # Learning hyperparameters
-    parser.add_argument('-epochs', type=int, default=1)
+    parser.add_argument('-epochs', type=int, default=25)
     # parser.add_argument('-lr_scheduler', type=str, default="SGDR", help="WarmUpDefault, SGDR")
     parser.add_argument('-lr_scheduler', type=str, default="WarmUpDefault", help="WarmUpDefault, SGDR")
     parser.add_argument('-lr_WarmUpSteps', type=int, default=8000, help="only for WarmUpDefault")
@@ -228,6 +232,9 @@ def get_program_arguments():
 def main():
     opt = get_program_arguments()
     
+    print("Batch size: ", opt.batchsize)
+    print("implement test: ", opt.imp_test)
+
     print("Number of GPUS to use: ", torch.cuda.device_count())
     opt.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -263,7 +270,6 @@ def main():
     model = get_model(opt, len(SRC.vocab), len(TRG.vocab))
     total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("# of trainable parameters: {}".format(total_trainable_params))
-
 
     opt.optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.lr_beta1, opt.lr_beta2), eps=opt.lr_eps)
     if opt.lr_scheduler == "SGDR":
@@ -305,3 +311,4 @@ def saveModel(model, opt, SRC, TRG, robustScaler):
 if __name__ == "__main__":
     main()
 
+                                                                                                                                                                                                                                                                                     

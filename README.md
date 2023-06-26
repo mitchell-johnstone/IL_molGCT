@@ -1,4 +1,55 @@
-# Paper Info.
+# Ionic Liquid Molecular Generative Chemical Transformer (ILmolGCT)
+This builds off the GCT (details below), improving the general structure and applying it to the Ionic Liquid field. 
+
+# Updates / Improvements
+- [x] Fix environment YAML file to be cross platform
+## Data
+- [ ] Replace the tokenization process to remove write/read delay
+- [ ] Add Ionic Liquid data
+- [ ] Switch conditions to list for more scalability
+- [ ] Use DataLoader object for batching instead of makeshift iterator
+## Training
+- [x] Improve the cuda implementation to utilize available GPUS
+- [x] Implement multi-gpu using DataParallel
+- [ ] Implement multi-gpu using DistributedDataParallel
+## Testing
+- [ ] Improve the cuda implementation to utilize available GPUS
+- [ ] Implement multi-gpu using DataParallel
+- [ ] Implement multi-gpu using DistributedDataParallel
+- [ ] 
+## Stretch goals
+- [ ] Update versions?
+- [ ] multithreading within gpus??
+
+# Implementation
+1. Set up your anaconda environment with the following code:
+```
+conda env create -f molgct_env.yaml
+```
+
+2. Activate the conda environment:
+```
+conda activate molgct
+```
+
+3. Train GCT:
+```
+python train.py
+```
+
+4. Infer molecules with the trained GCT:
+```
+python inference.py
+```
+
+5. Deactivate the session:
+```
+conda deactivate
+```
+
+# Original Implementation
+
+## Paper Info.
 Hyunseung Kim, Jonggeol Na*, and Won Bo Lee*, "Generative Chemical Transformer: Neural Machine Learning of Molecular Geometric Structures from Chemical Language via Attention, " J. Chem. Inf. Model. 2021, 61, 12, 5804-5814  
 [Featured as JCIM journal supplentary cover]  https://pubs.acs.org/doi/abs/10.1021/acs.jcim.1c01289  
 <p align="center">
@@ -6,7 +57,7 @@ Hyunseung Kim, Jonggeol Na*, and Won Bo Lee*, "Generative Chemical Transformer: 
 
 **Generative Chemical Transformer (GCT) directly designs hit-like materials matched given target properties. Transformer's high level of context-awareness ability of chemical language aids in designing molecules more realistic and vaild.**
 
-# Citation
+## Citation
 ```
 @article{kim2021generative,
   title={Generative Chemical Transformer: Neural Machine Learning of Molecular Geometric Structures from Chemical Language via Attention},
@@ -20,7 +71,7 @@ Hyunseung Kim, Jonggeol Na*, and Won Bo Lee*, "Generative Chemical Transformer: 
 }
 ```
 
-# molGCT: Transformer+cVAE  
+## molGCT: Transformer+cVAE  
 **Overview of GCT: Tranining phase and Inference phase**  
 <img src = "images/image1.svg" width="75%">   
   
@@ -39,24 +90,6 @@ The molecules in circle are real molecules in MOSES database, and the molecules 
 
 **Result examples**  
 <img src = "images/image2.png" width="85%">  
-  
-
-# Implementation
-1. Set up your anaconda environment with the following code:
-```
-conda env create -f molgct_env.yaml
-```
-
-2. Run to train GCT:
-```
-python train.py
-```
-
-3. Run to infer molecules with the trained GCT:
-```
-python inference.py
-```
-
 
 # References
 Basic Transformer code was borrowed and modified from: https://github.com/SamLynnEvans/Transformer  

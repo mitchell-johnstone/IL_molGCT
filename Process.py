@@ -159,8 +159,7 @@ def create_dataset(opt, SRC, TRG, PROP, tr_te):
 
 
 def get_len(train):
-    i = 0
-    for b in train:
-        i += 1
+    for i, b in enumerate(train):
+        pass
     return i
 
