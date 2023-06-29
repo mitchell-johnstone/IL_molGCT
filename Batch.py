@@ -57,6 +57,9 @@ class MyIterator(data.Iterator):
             for b in data.batch(self.data(), self.batch_size,
                                           self.batch_size_fn):
                 self.batches.append(sorted(b, key=self.sort_key))
+    
+    def __len__(self):
+        return sum(1 for _ in self)
 
 global max_src_in_batch, max_tgt_in_batch
 
@@ -67,7 +70,7 @@ def batch_size_fn(new, count, sofar):
         max_src_in_batch = 0
         max_tgt_in_batch = 0
     max_src_in_batch = max(max_src_in_batch,  len(new.src))
-    max_tgt_in_batch = max(max_tgt_in_batch,  len(new.trg) + 2)
+    max_tgt_in_batch = max(max_tgt_in_batch,  len(new.trg) + 2) # Add 2 due to the <sos> and <eos> tokens
     src_elements = count * max_src_in_batch
     tgt_elements = count * max_tgt_in_batch
     return max(src_elements, tgt_elements)

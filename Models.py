@@ -84,6 +84,7 @@ class Transformer(nn.Module):
         super().__init__()
         self.use_cond2dec = opt.use_cond2dec
         self.use_cond2lat = opt.use_cond2lat
+        self.cond_dim = opt.cond_dim
         self.encoder = Encoder(opt, src_vocab, opt.d_model, opt.n_layers, opt.heads, opt.dropout)
         self.decoder = Decoder(opt, trg_vocab, opt.d_model, opt.n_layers, opt.heads, opt.dropout)
         self.out = nn.Linear(opt.d_model, trg_vocab)
@@ -95,9 +96,9 @@ class Transformer(nn.Module):
         d_output = self.decoder(trg, z, cond, src_mask, trg_mask)
         output = self.out(d_output)
         if self.use_cond2dec == True:
-            output_prop, output_mol = self.prop_fc(output[:, :3, :]), output[:, 3:, :]
+            output_prop, output_mol = self.prop_fc(output[:, :self.cond_dim, :]), output[:, self.cond_dim:, :]
         else:
-            output_prop, output_mol = torch.zeros(output.size(0), 3, 1).to(output.device), output
+            output_prop, output_mol = torch.zeros(output.size(0), self.cond_dim, 1).to(output.device), output
         return output_prop, output_mol, mu, log_var, z
 
 

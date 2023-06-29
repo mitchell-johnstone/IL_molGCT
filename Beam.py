@@ -19,7 +19,7 @@ def init_vars(cond, model, SRC, TRG, toklen, opt, z):
 #        z, src_mask, trg_mask = z.cuda(), src_mask.cuda(), trg_mask.cuda()
 
     if opt.use_cond2dec == True:
-        output_mol = model.out(model.decoder(trg_in, z, cond, src_mask, trg_mask))[:, 3:, :]
+        output_mol = model.out(model.decoder(trg_in, z, cond, src_mask, trg_mask))[:, opt.cond_dim:, :]
     else:
         output_mol = model.out(model.decoder(trg_in, z, cond, src_mask, trg_mask))
     out_mol = F.softmax(output_mol, dim=-1)
@@ -72,7 +72,7 @@ def beam_search(cond, model, SRC, TRG, toklen, opt, z):
         trg_mask = trg_mask.repeat(opt.k, 1, 1)
 
         if opt.use_cond2dec == True:
-            output_mol = model.out(model.decoder(outputs[:,:i], e_outputs, cond, src_mask, trg_mask))[:, 3:, :]
+            output_mol = model.out(model.decoder(outputs[:,:i], e_outputs, cond, src_mask, trg_mask))[:, opt.cond_dim:, :]
         else:
             output_mol = model.out(model.decoder(outputs[:,:i], e_outputs, cond, src_mask, trg_mask))
         out_mol = F.softmax(output_mol, dim=-1)
@@ -95,9 +95,7 @@ def beam_search(cond, model, SRC, TRG, toklen, opt, z):
             break
     
     if ind is None:
-        length = (outputs[0]==eos_tok).nonzero()[0]
-        return ' '.join([TRG.vocab.itos[tok] for tok in outputs[0][1:length]])
-    
-    else:
-        length = (outputs[ind]==eos_tok).nonzero()[0]
-        return ' '.join([TRG.vocab.itos[tok] for tok in outputs[ind][1:length]])
+        ind = 0
+        
+    length = (outputs[ind]==eos_tok).nonzero()[0]
+    return ' '.join([TRG.vocab.itos[tok] for tok in outputs[ind][1:length]])
