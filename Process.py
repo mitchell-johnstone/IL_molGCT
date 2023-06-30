@@ -16,14 +16,13 @@ def try_read_data(filename):
     """
     Try to read the given filename
     """
-    contents = None
     if filename is not None:
         try:
-            contents = open(filename, 'rt', encoding='UTF8').read().strip().split('\n')
+            return open(filename, 'rt', encoding='UTF8').read().strip().split('\n')
         except:
             print("error: '" + filename + "' file not found")
             quit()
-    return contents 
+    return None
 
 
 def read_data(opt):
@@ -140,9 +139,7 @@ def create_dataset(opt, train):
     print(f"     - # of {label} samples:", len(df.index))
 
     if train:
-        toklenList = []
-        for i in range(len(dataset)):
-            toklenList.append(len(vars(dataset[i])['src']))
+        toklenList = [len(vars(item)['src']) for item in dataset]
         df_toklenList = pd.DataFrame(toklenList, columns=["toklen"])
         df_toklenList.to_csv("toklen_list.csv", index=False)
 

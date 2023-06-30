@@ -11,7 +11,6 @@ def calcForDataset(dataset, filename):
     """
     Calculate the properties and save the properties for one dataset
     """
-    count = 0
     logP_list, tPSA_list, QED_list = [], [], []
 
     for smi in tqdm(dataset, desc="Properties Calculated: "):
