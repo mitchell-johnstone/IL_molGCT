@@ -9,11 +9,9 @@ import torch.nn.functional as F
 from torch.nn import DataParallel
 from Optim import CosineWithRestarts
 from Batch import create_masks
-from sklearn.preprocessing import RobustScaler, StandardScaler
 import joblib
 import dill as pickle
 import pandas as pd
-from calProp import calcProperty
 import csv
 import timeit
 
@@ -36,7 +34,6 @@ def loss_function(opt, beta, preds_prop, preds_mol, ys_cond, ys_mol, mu, log_var
 
 
 def train_model(model, opt):
-    global robustScaler
     print("training model...")
 
     if torch.cuda.is_available():
@@ -156,13 +153,6 @@ def train_model(model, opt):
         history_df = history_df.append(history_dict.copy(), ignore_index=True)
 
         # Export weights every epoch
-        # if not os.path.isdir('{}'.format(opt.save_folder_name)):
-        #     os.mkdir('{}'.format(opt.save_folder_name))
-        # if not os.path.isdir('{}/epo{}'.format(opt.save_folder_name, epoch + 1)):
-        #     os.mkdir('{}/epo{}'.format(opt.save_folder_name, epoch + 1))
-        # torch.save(model.state_dict(), f'{opt.save_folder_name}/epo{epoch+1}/model_weights')
-        # joblib.dump(robustScaler, f'{opt.save_folder_name}/epo{epoch+1}/scaler.pkl')
-
         dst = 'weights'
         os.makedirs(dst, exist_ok=True)
         print(f'saving weights to {dst}/...')
@@ -230,6 +220,14 @@ def get_program_arguments():
 
 
 def main():
+    """
+    main program. Triggers the following subprocesses
+    - get program arguments
+    - loading the data
+    - making the model
+    - training the model
+    - saving the model
+    """
     opt = get_program_arguments()
     
     print("Batch size: ", opt.batchsize)
@@ -238,60 +236,38 @@ def main():
     print("Number of GPUS to use: ", torch.cuda.device_count())
     opt.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    read_data(opt)
+    if opt.checkpoint > 0:
+        print("model weights will be saved every %d minutes and at end of epoch to directory weights/"%(opt.checkpoint))
 
-    # Property calculation: logP, tPSA, QED
-    if opt.calProp:
-        PROP, PROP_te = calcProperty(opt)
-    else:
-        PROP, PROP_te = pd.read_csv("data/moses/prop_temp.csv"), pd.read_csv("data/moses/prop_temp_te.csv")
+    # Prepare the dataset
+    prepare_dataset(opt)
 
-    SRC, TRG = create_fields(opt)
-    opt.max_logP = PROP["logP"].max()
-    opt.min_logP = PROP["logP"].min()
-    opt.max_tPSA = PROP["tPSA"].max()
-    opt.min_tPSA = PROP["tPSA"].min()
-    opt.max_QED = PROP_te["QED"].max()
-    opt.min_QED = PROP_te["QED"].min()
+    # Get the model
+    model = get_model(opt, len(opt.src_tok.vocab), len(opt.trg_tok.vocab))
 
-    robustScaler = RobustScaler()
-    robustScaler.fit(PROP)
-    # if not os.path.isdir('{}'.format(opt.save_folder_name)):
-    #     os.mkdir('{}'.format(opt.save_folder_name))
-    # joblib.dump(robustScaler, 'scaler.pkl')
-    # robustScaler = joblib.load('scaler.pkl')
-
-    # Scale the data
-    PROP, PROP_te = pd.DataFrame(robustScaler.transform(PROP)), pd.DataFrame(robustScaler.transform(PROP_te))
-
-    opt.train = create_dataset(opt, SRC, TRG, PROP, tr_te='tr')
-    opt.test = create_dataset(opt, SRC, TRG, PROP_te, tr_te='te')
-
-    model = get_model(opt, len(SRC.vocab), len(TRG.vocab))
     total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("# of trainable parameters: {}".format(total_trainable_params))
 
+    # Set up the optimizer and scheduler
     opt.optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.lr_beta1, opt.lr_beta2), eps=opt.lr_eps)
     if opt.lr_scheduler == "SGDR":
         opt.sched = CosineWithRestarts(opt.optimizer, T_max=opt.train_len)
 
-    if opt.checkpoint > 0:
-        print("model weights will be saved every %d minutes and at end of epoch to directory weights/"%(opt.checkpoint))
+    # Save the tokenizer weights
+    os.makedirs('weights', exist_ok=True)
+    pickle.dump(opt.src_tok, open('weights/SRC.pkl', 'wb'))
+    pickle.dump(opt.trg_tok, open('weights/TRG.pkl', 'wb'))
     
-    if opt.load_weights is not None and opt.floyd is not None:
-        os.makedirs('weights', exist_ok=True)
-        pickle.dump(SRC, open('weights/SRC.pkl', 'wb'))
-        pickle.dump(TRG, open('weights/TRG.pkl', 'wb'))
-    
+    # train the model
     train_model(model, opt)
 
-    if opt.floyd is False:
-        saveModel(model, opt, SRC, TRG, robustScaler)
+    # Save the updated model
+    saveModel(model, opt)
 
 
-def saveModel(model, opt, SRC, TRG, robustScaler):
+def saveModel(model, opt):
     """
-    Save the model, including the weights and the robust scaler
+    Save the model, including the weights, tokenizers, and the robust scaler
     """
     if opt.load_weights is not None:
         dst = opt.load_weights
@@ -301,14 +277,12 @@ def saveModel(model, opt, SRC, TRG, robustScaler):
     os.makedirs(dst, exist_ok=True)
     print(f'saving weights to {dst}/...')
     torch.save(model.state_dict(), f'{dst}/model_weights')
-    pickle.dump(SRC, open(f'{dst}/SRC.pkl', 'wb'))
-    pickle.dump(TRG, open(f'{dst}/TRG.pkl', 'wb'))
-    joblib.dump(robustScaler, open(f'{dst}/scaler.pkl', 'wb'))
+    pickle.dump(opt.src_tok, open(f'{dst}/SRC.pkl', 'wb'))
+    pickle.dump(opt.trg_tok, open(f'{dst}/TRG.pkl', 'wb'))
+    joblib.dump(opt.robust_scaler, open(f'{dst}/scaler.pkl', 'wb'))
     
     print(f'weights and field pickles saved to {dst}')
 
 
 if __name__ == "__main__":
     main()
-
-                                                                                                                                                                                                                                                                                     
