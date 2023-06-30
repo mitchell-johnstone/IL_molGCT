@@ -4,7 +4,7 @@ This builds off the GCT (details below), improving the general structure and app
 # Updates / Improvements
 - [x] Fix environment YAML file to be cross platform
 ## Data
-- [ ] Replace the tokenization process to remove write/read delay
+- [x] Replace the tokenization process to remove write/read delay
 - [ ] Add Ionic Liquid data
 - [ ] Switch conditions to list for more scalability
 - [ ] Use DataLoader object for batching instead of makeshift iterator
@@ -13,10 +13,9 @@ This builds off the GCT (details below), improving the general structure and app
 - [x] Implement multi-gpu using DataParallel
 - [ ] Implement multi-gpu using DistributedDataParallel
 ## Testing
-- [ ] Improve the cuda implementation to utilize available GPUS
+- [x] Improve the cuda implementation to utilize available GPUS
 - [ ] Implement multi-gpu using DataParallel
 - [ ] Implement multi-gpu using DistributedDataParallel
-- [ ] 
 ## Stretch goals
 - [ ] Update versions?
 - [ ] multithreading within gpus??
