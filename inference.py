@@ -1,33 +1,32 @@
-import sys
-from io import StringIO
-import argparse
-import time
-from Models import get_model
-from Process import *
-import torch.nn.functional as F
-from Optim import CosineWithRestarts
 from Batch import create_masks
-import pdb
-import dill as pickle
-import argparse
+from Beam import beam_search
+from Models import get_model
+from dataDistibutionCheck import checkdata
+from Optim import CosineWithRestarts
+from rand_gen import rand_gen_from_data_distribution, tokenlen_gen_from_data_distribution
+from Process import *
+
+from io import StringIO
+from nltk.corpus import wordnet
 from rdkit import Chem
 from rdkit.Chem import Descriptors, QED, rdDepictor, AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
-from Beam import beam_search
-from nltk.corpus import wordnet
-from torch.autograd import Variable
 from sklearn.preprocessing import RobustScaler, StandardScaler
+from torch.autograd import Variable
+from tqdm import tqdm
+import argparse
+import argparse
+import dill as pickle
 import joblib
-import re
-import numpy as np
 import math
 import moses
-from rand_gen import rand_gen_from_data_distribution, tokenlen_gen_from_data_distribution
-from dataDistibutionCheck import checkdata
-from tqdm import tqdm
-from torch.nn import DataParallel
+import numpy as np
+import pdb
+import re
+import sys
+import time
 import torch
-from functools import partial
+import torch.nn.functional as F
 
 #def get_synonym(word, SRC):
 #    syns = wordnet.synsets(word)
@@ -170,6 +169,8 @@ def single_molecule(model, opt):
     toklen= int(tokenlen_gen_from_data_distribution(data=toklen_data, nBins=int(toklen_data.max() - toklen_data.min()), size=1)) + opt.cond_dim  # + cond_dim due to cond2enc
 
     z = torch.Tensor(np.random.normal(size=(1, toklen, opt.latent_dim)))
+
+    model = model.to(opt.device)
 
     for cond in conds:
         molecules.append(gen_mol(cond + ',', model, toklen, opt, z))

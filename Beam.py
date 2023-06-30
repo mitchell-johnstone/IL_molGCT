@@ -12,11 +12,8 @@ def init_vars(cond, model, SRC, TRG, toklen, opt, z):
     trg_mask = nopeak_mask(1, opt)
 
     trg_in = torch.LongTensor([[init_tok]]).to(opt.device)
-#    trg_in = torch.LongTensor([[init_tok]])
 
     z, src_mask, trg_mask = z.to(opt.device), src_mask.to(opt.device), trg_mask.to(opt.device)
-#    if opt.device == 0:
-#        z, src_mask, trg_mask = z.cuda(), src_mask.cuda(), trg_mask.cuda()
 
     if opt.use_cond2dec == True:
         output_mol = model.out(model.decoder(trg_in, z, cond, src_mask, trg_mask))[:, opt.cond_dim:, :]
@@ -28,12 +25,10 @@ def init_vars(cond, model, SRC, TRG, toklen, opt, z):
     log_scores = torch.Tensor([math.log(prob) for prob in probs.data[0]]).unsqueeze(0)
     
     outputs = torch.zeros(opt.k, opt.max_strlen).long().to(opt.device)
-#    outputs = torch.zeros(opt.k, opt.max_strlen).long()
     outputs[:, 0] = init_tok
     outputs[:, 1] = ix[0]
 
     e_outputs = torch.zeros(opt.k, z.size(-2), z.size(-1)).to(opt.device)
-#    e_outputs = torch.zeros(opt.k, z.size(-2), z.size(-1))
     e_outputs[:, :] = z[0]
     
     return outputs, e_outputs, log_scores
@@ -54,8 +49,6 @@ def k_best_outputs(outputs, out, log_scores, i, k):
     return outputs, log_scores
 
 def beam_search(cond, model, SRC, TRG, toklen, opt, z):
-#    if opt.device == 0:
-#        cond = cond.cuda()
     cond = cond.to(opt.device)
     cond = cond.view(1, -1)
 
@@ -66,8 +59,7 @@ def beam_search(cond, model, SRC, TRG, toklen, opt, z):
     src_mask = (torch.ones(1, 1, toklen) != 0)
     src_mask = src_mask.repeat(opt.k, 1, 1)
     src_mask = src_mask.to(opt.device)
-#    if opt.device == 0:
-#        src_mask = src_mask.cuda()
+
     eos_tok = TRG.vocab.stoi['<eos>']
 
     ind = None
