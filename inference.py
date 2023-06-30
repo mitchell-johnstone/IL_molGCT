@@ -2,7 +2,6 @@ import sys
 from io import StringIO
 import argparse
 import time
-import torch
 from Models import get_model
 from Process import *
 import torch.nn.functional as F
@@ -14,7 +13,6 @@ import argparse
 from rdkit import Chem
 from rdkit.Chem import Descriptors, QED, rdDepictor, AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
-from Models import get_model
 from Beam import beam_search
 from nltk.corpus import wordnet
 from torch.autograd import Variable
@@ -27,6 +25,9 @@ import moses
 from rand_gen import rand_gen_from_data_distribution, tokenlen_gen_from_data_distribution
 from dataDistibutionCheck import checkdata
 from tqdm import tqdm
+from torch.nn import DataParallel
+import torch
+from functools import partial
 
 #def get_synonym(word, SRC):
 #    syns = wordnet.synsets(word)
@@ -37,7 +38,7 @@ from tqdm import tqdm
 #            
 #    return 0
 
-def gen_mol(cond, model, opt, toklen, z):
+def gen_mol(cond, model, toklen, opt, z):
     model.eval()
 
     if opt.conds not in 'msl':
@@ -46,12 +47,33 @@ def gen_mol(cond, model, opt, toklen, z):
 
     cond = opt.robust_scaler.transform(cond)
     cond = Variable(torch.Tensor(cond))
-    
+
     sentence = beam_search(cond, model, opt.src_tok, opt.trg_tok, toklen, opt, z)
     return sentence
 
 
-def ten_condition_test(opt, model):
+# def single_moses_step(toklen, idx, model, opt, conds):
+#     print("Got here!")
+#     z = torch.Tensor(np.random.normal(size=(1, toklen, opt.latent_dim)))
+#     molecule_tmp = gen_mol(conds[idx], model, toklen, opt, z)
+#     toklen_gen = molecule_tmp.count(" ") + 1
+# 
+#     molecule_tmp = ''.join(molecule_tmp).replace(" ", "")
+#     
+#     conds_trg = conds[idx]
+#     toklen_check = toklen-opt.cond_dim # toklen - cond_dim: due to cond size
+# 
+#     m = Chem.MolFromSmiles(molecule_tmp)
+#     if m is None:
+#         val_check = 0
+#         conds_rdkit = np.array([None, None, None])
+#     else:
+#         val_check = 1
+#         conds_rdkit = np.array([Descriptors.MolLogP(m), Descriptors.TPSA(m), QED.qed(m)])
+#     return molecule_tmp, val_check, conds_trg, conds_rdkit, toklen_check, toklen_gen
+
+
+def ten_condition_test(model, opt):
     molecules, val_check, conds_trg, conds_rdkit, toklen_check, toklen_gen = [], [], [], [], [], []
     print("\nGenerating molecules for 10 condition sets...")
     n_samples = 10
@@ -65,12 +87,14 @@ def ten_condition_test(opt, model):
     toklen_data = tokenlen_gen_from_data_distribution(data=toklen_data, nBins=int(toklen_data.max()-toklen_data.min()), size=n_samples*n_per_samples)
 
     print("conds:\n", conds)
+    model = model.to(opt.device)
+    
     start = time.time()
-    for idx in range(n_samples):
-        for i in range(n_per_samples):
+    for idx in tqdm(range(n_samples), desc="Samples:", total=n_samples):
+        for i in tqdm(range(n_per_samples), desc="Sub-Samples:", total=n_per_samples):
             toklen = int(toklen_data[idx*n_per_samples + i]) + opt.cond_dim  # + cond_dim due to cond2enc
             z = torch.Tensor(np.random.normal(size=(1, toklen, opt.latent_dim)))
-            molecule_tmp = gen_mol(conds[idx], model, opt, toklen, z)
+            molecule_tmp = gen_mol(conds[idx], model, toklen, opt, z)
             toklen_gen.append(molecule_tmp.count(" ") + 1)
             molecule_tmp = ''.join(molecule_tmp).replace(" ", "")
 
@@ -86,9 +110,6 @@ def ten_condition_test(opt, model):
                 val_check.append(1)
                 conds_rdkit.append(np.array([Descriptors.MolLogP(m), Descriptors.TPSA(m), QED.qed(m)]))
 
-            if (idx*n_per_samples+i+1) % 100 == 0:
-                print("*   {}m: {} / {}".format((time.time() - start)//60, idx*n_per_samples+i+1, n_samples*n_per_samples))
-
             if (idx*n_per_samples+i+1) % 200 == 0:
                 np_conds_trg, np_conds_rdkit = np.array(conds_trg), np.array(conds_rdkit)
                 gen_list = pd.DataFrame(
@@ -98,7 +119,7 @@ def ten_condition_test(opt, model):
     print("Please check the file: 'moses_bench2_10conds_lat={}_epo={}_k={}_{}.csv'".format(opt.latent_dim, opt.epochs, opt.k, time.strftime("%Y%m%d")))
 
 
-def moses_benchmark(opt, model):
+def moses_benchmark(model, opt):
     molecules, val_check, conds_trg, conds_rdkit, toklen_check, toklen_gen = [], [], [], [], [], []
     print("\nGenerating molecules for MOSES benchmarking...")
     n_samples = 30000
@@ -109,15 +130,18 @@ def moses_benchmark(opt, model):
 
     conds = rand_gen_from_data_distribution(data, size=n_samples, nBins=nBins)
     toklen_data = tokenlen_gen_from_data_distribution(data=toklen_data, nBins=int(toklen_data.max()-toklen_data.min()), size=n_samples)
+    
+    model = model.to(opt.device)
 
     start = time.time()
-    for idx in tqdm(range(n_samples)):
+    for idx in tqdm(range(n_samples), desc="Generated:", total=n_samples):
         toklen = int(toklen_data[idx]) + opt.cond_dim  # + cond_dim due to cond2enc
+        
         z = torch.Tensor(np.random.normal(size=(1, toklen, opt.latent_dim)))
-        molecule_tmp = gen_mol(conds[idx], model, opt, toklen, z)
+        molecule_tmp = gen_mol(conds[idx], model, toklen, opt, z)
         toklen_gen.append(molecule_tmp.count(' ')+1)
         molecule_tmp = ''.join(molecule_tmp).replace(" ", "")
-
+        
         molecules.append(molecule_tmp)
         conds_trg.append(conds[idx])
         # toklen - cond_dim: due to cond dim
@@ -129,10 +153,7 @@ def moses_benchmark(opt, model):
         else:
             val_check.append(1)
             conds_rdkit.append(np.array([Descriptors.MolLogP(m), Descriptors.TPSA(m), QED.qed(m)]))
-
-        if (idx+1) % 100 == 0:
-            print("*   {}m: {} / {}".format((time.time() - start)//60, idx+1, n_samples))
-
+        
         if (idx+1) % 2000 == 0:
             np_conds_trg, np_conds_rdkit = np.array(conds_trg), np.array(conds_rdkit)
             gen_list = pd.DataFrame(
@@ -142,7 +163,7 @@ def moses_benchmark(opt, model):
     print("Please check the file: 'moses_bench2_lat={}_epo={}_k={}_{}.csv'".format(opt.latent_dim, opt.epochs, opt.k, time.strftime("%Y%m%d")))
 
 
-def single_molecule(opt, model):
+def single_molecule(model, opt):
     molecules, val_check, conds_trg, conds_rdkit, toklen_check, toklen_gen = [], [], [], [], [], []
     conds = opt.conds.split(';')
     toklen_data = pd.read_csv(opt.load_toklendata)
@@ -151,7 +172,7 @@ def single_molecule(opt, model):
     z = torch.Tensor(np.random.normal(size=(1, toklen, opt.latent_dim)))
 
     for cond in conds:
-        molecules.append(gen_mol(cond + ',', model, opt, toklen, z))
+        molecules.append(gen_mol(cond + ',', model, toklen, opt, z))
     toklen_gen = molecules[0].count(" ") + 1
     molecules = ''.join(molecules).replace(" ", "")
     m = Chem.MolFromSmiles(molecules)
@@ -221,11 +242,11 @@ def main():
         if opt.conds=="q":
             break
         if opt.conds == 'm':
-            moses_benchmark(opt, model)
+            moses_benchmark(model, opt)
         elif opt.conds == 's':
-            ten_condition_test(opt, model)
+            ten_condition_test(model, opt)
         else:
-            single_molecule(opt, model)
+            single_molecule(model, opt)
 
 
 if __name__ == '__main__':

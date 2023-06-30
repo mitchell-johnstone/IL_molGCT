@@ -16,7 +16,7 @@ def nopeak_mask(size, opt):
         lower_mask = np.concatenate([cond_mask_lowerleft, np_mask], axis=2)
         np_mask = np.concatenate([upper_mask, lower_mask], axis=1)
     np_mask = Variable(torch.from_numpy(np_mask) == 0)
-    return np_mask
+    return np_mask.to(opt.device)
 
 
 def create_masks(src, trg, cond, opt):
@@ -31,9 +31,9 @@ def create_masks(src, trg, cond, opt):
         if opt.use_cond2dec == True:
             trg_mask = torch.cat([cond_mask, trg_mask], dim=2)
         np_mask = nopeak_mask(trg.size(1), opt)
+        trg_mask = trg_mask.to(opt.device)
         trg_mask = trg_mask & np_mask
         trg_mask = trg_mask.to(opt.device)
-
     else:
         trg_mask = None
     return src_mask, trg_mask
