@@ -32,13 +32,14 @@ class Encoder(nn.Module):
         x = self.embed_sentence(src)
         x = torch.cat([cond2enc, x], dim=1)
         x = self.pe(x)
+        attentions = [None]*self.N
         for i in range(self.N):
-            x = self.layers[i](x, mask)
+            x, attentions[i] = self.layers[i](x, mask)
         x = self.norm(x)
 
         mu = self.fc_mu(x)
         log_var = self.fc_log_var(x)
-        return self.sampling(mu, log_var), mu, log_var
+        return self.sampling(mu, log_var), mu, log_var, attentions
 
     def sampling(self, mu, log_var):
         std = torch.exp(0.5*log_var)
@@ -80,7 +81,7 @@ class Decoder(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, opt, src_vocab, trg_vocab):
+    def __init__(self, opt, src_vocab, trg_vocab, return_encoder_attention=False):
         super().__init__()
         self.use_cond2dec = opt.use_cond2dec
         self.use_cond2lat = opt.use_cond2lat
@@ -90,31 +91,36 @@ class Transformer(nn.Module):
         self.out = nn.Linear(opt.d_model, trg_vocab)
         if self.use_cond2dec == True:
             self.prop_fc = nn.Linear(trg_vocab, 1)
+        self.return_encoder_attention = return_encoder_attention
 
     def forward(self, src, trg, cond, src_mask, trg_mask):
-        z, mu, log_var = self.encoder(src, cond, src_mask)
+        z, mu, log_var, encoder_attention = self.encoder(src, cond, src_mask)
         d_output = self.decoder(trg, z, cond, src_mask, trg_mask)
         output = self.out(d_output)
         if self.use_cond2dec == True:
             output_prop, output_mol = self.prop_fc(output[:, :self.cond_dim, :]), output[:, self.cond_dim:, :]
         else:
             output_prop, output_mol = torch.zeros(output.size(0), self.cond_dim, 1).to(output.device), output
+
+        if self.return_encoder_attention:
+            return output_prop, output_mol, mu, log_var, z, encoder_attention
         return output_prop, output_mol, mu, log_var, z
 
 
-def get_model(opt, src_vocab, trg_vocab):
+def get_model(opt, src_vocab, trg_vocab, return_encoder_attention=False):
     assert opt.d_model % opt.heads == 0
     assert opt.dropout < 1
 
-    model = Transformer(opt, src_vocab, trg_vocab)
+    model = Transformer(opt, src_vocab, trg_vocab, return_encoder_attention)
 
     if opt.print_model == True:
         print("model structure:\n", model)
 
     if opt.load_weights is not None:
-        print("loading pretrained weights...")
+        print("Loading pretrained weights...")
         model.load_state_dict(torch.load(f'{opt.load_weights}/model_weights'))
     else:
+        print("No saved weights, randomizing...")
         for p in model.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)

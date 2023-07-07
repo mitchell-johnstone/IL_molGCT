@@ -76,11 +76,11 @@ def train_model(model, opt):
             trg = batch.trg.transpose(0, 1)
             trg_input = trg[:, :-1]
 
-            cond = torch.stack([batch.logP, batch.tPSA, batch.QED]).transpose(0, 1)
+            cond = torch.stack([vars(batch)[label] for label in opt.cond_labels]).transpose(0,1)
+            # cond = torch.stack([batch.Temperature, batch.Pressure, batch.DynViscosity, \
+            #                     batch.Density, batch.ElecConductivity]).transpose(0, 1)
 
             src_mask, trg_mask = create_masks(src, trg_input, cond, opt)
-            src_mask = src_mask
-            trg_mask = trg_mask
 
             preds_prop, preds_mol, mu, log_var, z = model(src, trg_input, cond, src_mask, trg_mask)
             ys_mol = trg[:, 1:].contiguous().view(-1).to(opt.device)
@@ -131,7 +131,10 @@ def train_model(model, opt):
                     src = batch.src.transpose(0, 1)
                     trg = batch.trg.transpose(0, 1)
                     trg_input = trg[:, :-1]
-                    cond = torch.stack([batch.logP, batch.tPSA, batch.QED]).transpose(0, 1)
+                    
+                    cond = torch.stack([vars(batch)[label] for label in opt.cond_labels]).transpose(0,1)
+                    # cond = torch.stack([batch.Temperature, batch.Pressure, batch.DynViscosity, \
+                    #                     batch.Density, batch.ElecConductivity]).transpose(0, 1)
 
                     src_mask, trg_mask = create_masks(src, trg_input, cond, opt)
                     preds_prop, preds_mol, mu, log_var, z = model(src, trg_input, cond, src_mask, trg_mask)
@@ -159,7 +162,8 @@ def train_model(model, opt):
         torch.save(model.state_dict(), f'{dst}/model_weights')
 
     # Export train/test history
-    history_df.to_csv(f'trHist_lat={opt.latent_dim}_{time.strftime("%Y%m%d")}.csv', index=False)
+    os.makedirs("train_history", exist_ok=True)
+    history_df.to_csv(f'./train_history/trHist_lat={opt.latent_dim}_{time.strftime("%Y%m%d")}.csv', index=False)
 
 
 def get_program_arguments():
@@ -169,10 +173,8 @@ def get_program_arguments():
     parser = argparse.ArgumentParser()
     # Data settings
     parser.add_argument('-imp_test', type=bool, default=True)
-    parser.add_argument('-src_data', type=str, default='data/moses/train.txt')
-    parser.add_argument('-src_data_te', type=str, default='data/moses/test.txt')
-    parser.add_argument('-trg_data', type=str, default='data/moses/train.txt')
-    parser.add_argument('-trg_data_te', type=str, default='data/moses/test.txt')
+    parser.add_argument('-data', type=str, default='data/IL/train.csv')
+    parser.add_argument('-data_te', type=str, default='data/IL/test.csv')
     parser.add_argument('-lang_format', type=str, default='SMILES')
     calProp = not os.path.isfile("data/moses/prop_temp.csv") or not os.path.isfile("data/moses/prop_temp_te.csv")
     parser.add_argument('-calProp', type=bool, default=calProp) #if prop_temp.csv and prop_temp_te.csv exist, set False
@@ -198,7 +200,7 @@ def get_program_arguments():
     parser.add_argument('-use_cond2dec', type=bool, default=False)
     parser.add_argument('-use_cond2lat', type=bool, default=True)
     parser.add_argument('-latent_dim', type=int, default=128)
-    parser.add_argument('-cond_dim', type=int, default=3)
+    parser.add_argument('-cond_dim', type=int, default=5)
     parser.add_argument('-d_model', type=int, default=512)
     parser.add_argument('-n_layers', type=int, default=6)
     parser.add_argument('-heads', type=int, default=8)
@@ -229,6 +231,7 @@ def main():
     - saving the model
     """
     opt = get_program_arguments()
+    opt.cond_labels = ["Temperature", "Pressure", "DynViscosity", "Density", "ElecConductivity"]
     
     print("Batch size: ", opt.batchsize)
     print("implement test: ", opt.imp_test)

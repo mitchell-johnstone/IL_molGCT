@@ -1,72 +1,39 @@
 import pandas as pd
 import torch
-import torchtext
 from torchtext import data
 from Tokenize import moltokenize
 from Batch import MyIterator, batch_size_fn
 from sklearn.preprocessing import RobustScaler, StandardScaler
-from CalcProperty import calcProperty
 import os
 import dill as pickle
 import numpy as np
 import joblib
 
 
-def try_read_data(filename):
-    """
-    Try to read the given filename
-    """
-    if filename is not None:
-        try:
-            return open(filename, 'rt', encoding='UTF8').read().strip().split('\n')
-        except:
-            print("error: '" + filename + "' file not found")
-            quit()
-    return None
-
-
 def read_data(opt):
     """
     Read each set of data, to get all of the data
     """
-    opt.src_data = try_read_data(opt.src_data)
-    opt.trg_data = try_read_data(opt.trg_data)
-    opt.src_data_te = try_read_data(opt.src_data_te)
-    opt.trg_data_te = try_read_data(opt.trg_data_te)
 
-    # Property calculation: logP, tPSA, QED
-    if opt.calProp:
-        PROP, PROP_te = calcProperty(opt)
-    else:
-        PROP, PROP_te = pd.read_csv("data/moses/prop_temp.csv"), pd.read_csv("data/moses/prop_temp_te.csv")
-    opt.max_logP = PROP["logP"].max()
-    opt.min_logP = PROP["logP"].min()
-    opt.max_tPSA = PROP["tPSA"].max()
-    opt.min_tPSA = PROP["tPSA"].min()
-    opt.max_QED = PROP_te["QED"].max()
-    opt.min_QED = PROP_te["QED"].min()
+    # Read the test and train data
+    opt.data = pd.read_csv(opt.data)
+    opt.data_te = pd.read_csv(opt.data_te)
 
+    # Set up scalar
     opt.robust_scaler = RobustScaler()
-    opt.robust_scaler.fit(PROP.values)
-    # if not os.path.isdir('{}'.format(opt.save_folder_name)):
-    #     os.mkdir('{}'.format(opt.save_folder_name))
-    # joblib.dump(opt.robust_scaler, 'weights/scaler.pkl')
-    # opt.robust_scaler = joblib.load('scaler.pkl')
+    opt.robust_scaler.fit(opt.data[opt.cond_labels].values)
 
     # Scale the data
-    opt.PROP = pd.DataFrame(opt.robust_scaler.transform(PROP.values), columns=["logP", "tPSA", "QED"])
-    opt.PROP_te = pd.DataFrame(opt.robust_scaler.transform(PROP_te.values), columns=["logP", "tPSA", "QED"])
+    opt.data[opt.cond_labels] = pd.DataFrame(opt.robust_scaler.transform(opt.data[opt.cond_labels].values))
+    opt.data_te[opt.cond_labels] = pd.DataFrame(opt.robust_scaler.transform(opt.data_te[opt.cond_labels].values))
 
 
 def get_data_df(opt, train):
     """
     Get the data as a Pandas DataFrame
     """
-    raw_data = {'src': list(opt.src_data) if train else list(opt.src_data_te),\
-                'trg': list(opt.trg_data) if train else list(opt.trg_data_te)}
-    data_df = pd.DataFrame(raw_data, columns=["src", "trg"])
-    prop_df = pd.DataFrame(opt.PROP if train else opt.PROP_te)
-    return pd.concat([data_df, prop_df], axis=1)
+    ret = opt.data if train else opt.data_te
+    return ret
 
 
 def create_fields(opt):
@@ -91,11 +58,9 @@ def create_fields(opt):
             print("error opening SRC.pkl and TXT.pkl field files, please ensure they are in " + opt.load_weights + "/")
             quit()
 
-    logP = data.Field(use_vocab=False, sequential=False, dtype=torch.float)
-    tPSA = data.Field(use_vocab=False, sequential=False, dtype=torch.float)
-    QED = data.Field(use_vocab=False, sequential=False, dtype=torch.float)
-
-    opt.data_fields = [('src', opt.src_tok), ('trg', opt.trg_tok), ('logP', logP), ('tPSA', tPSA), ('QED', QED)]
+    cond_fields =  [(label, data.Field(use_vocab=False, sequential=False, dtype=torch.float)) for label in opt.cond_labels]
+    opt.data_fields = [('src', opt.src_tok), ('trg', opt.trg_tok)] + cond_fields
+    print("Data Fields:", opt.data_fields)
 
 
 class ChemicalDataset(data.Dataset):
@@ -120,14 +85,6 @@ def create_dataset(opt, train):
     label = "train" if train else "test"
     print(f'\n* creating [{label}] dataset and iterator... ')
     df = get_data_df(opt, train)
-    # print(df.info())
-    # print(df.head())
-
-    ################ TESTING THE CODE #####################
-    # if train:  #for code test
-    #     df = df[:30000]
-    # else:
-    #     df = df[:3000]
 
     if opt.lang_format == 'SMILES':
         mask = (df['src'].str.len() + opt.cond_dim < opt.max_strlen) & (df['trg'].str.len() + opt.cond_dim < opt.max_strlen)
@@ -147,7 +104,7 @@ def create_dataset(opt, train):
         print("     - tokenized {label} sample 0:", vars(dataset[0]))
 
     # put our data into an batching iterator
-    iterator = MyIterator(dataset, batch_size=opt.batchsize, repeat=False, sort_key=lambda x: (len(x.src), len(x.trg), x.logP, x.tPSA, x.QED), batch_size_fn=batch_size_fn, train=True, shuffle=True)
+    iterator = MyIterator(dataset, batch_size=opt.batchsize, repeat=False, sort_key=lambda x: (len(x.src), len(x.trg), x.Temperature, x.Pressure, x.DynViscosity, x.Density, x.ElecConductivity), batch_size_fn=batch_size_fn, train=True, shuffle=True)
     #iterator = data.DataLoader(dataset, batch_size=opt.batchsize, shuffle=True, num_workers=torch.get_num_threads())
 
     if train:
