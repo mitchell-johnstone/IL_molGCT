@@ -1,0 +1,33 @@
+name: ilmolgct
+channels:
+  - defaults
+  - rdkit
+  - nvidia
+  - conda-forge
+  - pytorch
+dependencies:
+  - cudatoolkit=10.2
+  - nltk
+  - pip
+  - python=3.9
+  - pytorch=1.10.0
+  - rdkit
+  - tk
+  - pip:
+    - argparse
+    - atomInSmiles
+    - charset-normalizer
+    - dill
+    - hyperopt
+    - joblib
+    - matplotlib
+    - moses
+    - numpy
+    - pandas
+    - seaborn
+    - scikit-learn
+    - smilespe
+    - spacy
+    - spacy-legacy
+    - torchtext==0.11.0
+    - tqdm

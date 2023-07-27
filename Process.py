@@ -1,7 +1,8 @@
 import pandas as pd
 import torch
-from torchtext import data
-from Tokenize import moltokenize
+from torchtext.legacy import data
+# from torchtext import data
+from Tokenize import *
 from Batch import MyIterator, batch_size_fn
 from sklearn.preprocessing import RobustScaler, StandardScaler
 import os
@@ -20,8 +21,11 @@ def read_data(opt):
     opt.data_te = pd.read_csv(opt.data_te)
 
     # Set up scalar
-    opt.robust_scaler = RobustScaler()
-    opt.robust_scaler.fit(opt.data[opt.cond_labels].values)
+    if opt.load_weights is None:
+        opt.robust_scaler = RobustScaler()
+        opt.robust_scaler.fit(opt.data[opt.cond_labels].values)
+    else:
+        opt.robust_scaler = joblib.load(opt.load_weights + '/scaler.pkl')
 
     # Scale the data
     opt.data[opt.cond_labels] = pd.DataFrame(opt.robust_scaler.transform(opt.data[opt.cond_labels].values))
@@ -43,8 +47,12 @@ def create_fields(opt):
 
     print("loading molecule tokenizers...")
 
-    t_src = moltokenize()
-    t_trg = moltokenize()
+    if opt.tokenizer == "smilespe":
+        t_src = smilespetokenize()
+        t_trg = smilespetokenize()
+    else:
+        t_src = atomtokenize()
+        t_trg = atomtokenize()
 
     opt.src_tok = data.Field(tokenize=t_src.tokenizer)
     opt.trg_tok = data.Field(tokenize=t_trg.tokenizer, init_token='<sos>', eos_token='<eos>')
@@ -60,7 +68,7 @@ def create_fields(opt):
 
     cond_fields =  [(label, data.Field(use_vocab=False, sequential=False, dtype=torch.float)) for label in opt.cond_labels]
     opt.data_fields = [('src', opt.src_tok), ('trg', opt.trg_tok)] + cond_fields
-    print("Data Fields:", opt.data_fields)
+    # print("Data Fields:", opt.data_fields)
 
 
 class ChemicalDataset(data.Dataset):
@@ -104,7 +112,7 @@ def create_dataset(opt, train):
         print("     - tokenized {label} sample 0:", vars(dataset[0]))
 
     # put our data into an batching iterator
-    iterator = MyIterator(dataset, batch_size=opt.batchsize, repeat=False, sort_key=lambda x: (len(x.src), len(x.trg), x.Temperature, x.Pressure, x.DynViscosity, x.Density, x.ElecConductivity), batch_size_fn=batch_size_fn, train=True, shuffle=True)
+    iterator = MyIterator(dataset, batch_size=opt.batchsize, repeat=False, sort_key=lambda x: (len(x.src), len(x.trg), x.Temperature, x.DynViscosity, x.Density, x.ElecConductivity), batch_size_fn=batch_size_fn, train=True, shuffle=True)
     #iterator = data.DataLoader(dataset, batch_size=opt.batchsize, shuffle=True, num_workers=torch.get_num_threads())
 
     if train:
@@ -116,14 +124,14 @@ def create_dataset(opt, train):
             opt.trg_tok.build_vocab(dataset)
             if opt.verbose == True:
                 print(f'     - vocab size of TRG: {len(opt.trg_tok.vocab)}\n        -> {opt.trg_tok.vocab.stoi}')
-            if opt.checkpoint > 0:
-                try:
-                    os.mkdir("weights")
-                except:
-                    print("weights folder already exists, run program with -load_weights weights to load them")
-                    quit()
-                pickle.dump(opt.src_tok, open('weights/SRC.pkl', 'wb'))
-                pickle.dump(opt.trg_tok, open('weights/TRG.pkl', 'wb')) 
+#            if opt.checkpoint > 0:
+#                try:
+#                    os.mkdir("weights")
+#                except:
+#                    print("weights folder already exists, run program with -load_weights weights to load them")
+#                    quit()
+#                pickle.dump(opt.src_tok, open('weights/SRC.pkl', 'wb'))
+#                pickle.dump(opt.trg_tok, open('weights/TRG.pkl', 'wb')) 
 
         opt.src_pad = opt.src_tok.vocab.stoi['<pad>']
         opt.trg_pad = opt.trg_tok.vocab.stoi['<pad>']

@@ -1,6 +1,7 @@
 import torch
 import numpy as np
-from torchtext import data
+from torchtext.legacy import data
+# from torchtext import data
 from torch.autograd import Variable
 from functools import partial
 

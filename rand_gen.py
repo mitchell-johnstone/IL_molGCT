@@ -68,21 +68,19 @@ def tokenlen_gen_from_data_distribution(data, nBins, size):
     return tokenlen_list
 
 def rand_gen_from_data_distribution(data, size, nBins, cond_dim):
-    H, edges = np.histogramdd(data.values, bins=(nBins[0], nBins[1], nBins[2], nBins[3], nBins[4]))
+    H, edges = np.histogramdd(data.values, bins=(nBins))
     P = H/len(data)
     P_flatten = P.reshape(-1)
     
     dxc_Temperature = np.diff(edges[0])[0]
-    dxc_Pressure = np.diff(edges[1])[0]
-    dxc_DynViscosity = np.diff(edges[2])[0]
-    dxc_Density = np.diff(edges[3])[0]
-    dxc_ElecConductivity = np.diff(edges[4])[0]
+    dxc_DynViscosity = np.diff(edges[1])[0]
+    dxc_Density = np.diff(edges[2])[0]
+    dxc_ElecConductivity = np.diff(edges[3])[0]
     
     xc_Temperature = edges[0][:-1] + 0.5 * dxc_Temperature
-    xc_Pressure = edges[1][:-1] + 0.5 * dxc_Pressure
-    xc_DynViscosity = edges[2][:-1] + 0.5 * dxc_DynViscosity
-    xc_Density = edges[3][:-1] + 0.5 * dxc_Density
-    xc_ElecConductivity = edges[4][:-1] + 0.5 * dxc_ElecConductivity
+    xc_DynViscosity = edges[1][:-1] + 0.5 * dxc_DynViscosity
+    xc_Density = edges[2][:-1] + 0.5 * dxc_Density
+    xc_ElecConductivity = edges[3][:-1] + 0.5 * dxc_ElecConductivity
 
     samples_idx = np.random.choice(len(P_flatten), size=size, p=P_flatten)
     samples_idx = np.array(np.unravel_index(samples_idx, P.shape)).T
@@ -90,17 +88,42 @@ def rand_gen_from_data_distribution(data, size, nBins, cond_dim):
     samples = np.zeros_like(samples_idx, dtype=np.float64)
 
     for i in range(len(samples_idx)):
-        samples[i] = [xc_Temperature[i][0], xc_Pressure[i][1], xc_DynViscosity[i][2], xc_Density[i][3], xc_ElecConductivity[i][4]]
+        samples[i] = [xc_Temperature[samples_idx[i][0]], xc_DynViscosity[samples_idx[i][1]], xc_Density[samples_idx[i][2]], xc_ElecConductivity[samples_idx[i][3]]]
     
     random_noise = np.random.uniform(low=-0.5, high=0.5, size=np.shape(samples))
     random_noise[:, 0] = random_noise[:, 0] * dxc_Temperature
-    random_noise[:, 1] = random_noise[:, 1] * dxc_Pressure
-    random_noise[:, 2] = random_noise[:, 2] * dxc_DynViscosity
-    random_noise[:, 3] = random_noise[:, 3] * dxc_Density
-    random_noise[:, 4] = random_noise[:, 4] * dxc_ElecConductivity
+    random_noise[:, 1] = random_noise[:, 1] * dxc_DynViscosity
+    random_noise[:, 2] = random_noise[:, 2] * dxc_Density
+    random_noise[:, 3] = random_noise[:, 3] * dxc_ElecConductivity
 
     samples = samples + random_noise
 
     return samples
 
-
+# Improved rand_gen_from_data_distribution
+#    # Find the histogram bins appropriate
+#    H, edges = np.histogramdd(data.values, bins=nBins)
+#    edges = np.array(edges)
+#
+#    # Scale Histogram data
+#    P = H/len(data)
+#    P_flatten = P.ravel()
+#    
+#    # Find the differences between edges
+#    dxc = np.diff(edges)[:, :1] # Note: :1 because it must be a matrix, not vector
+#
+#    # Shift all edges
+#    xc = edges[:, :-1] + 0.5 * dxc
+#    
+#    # Get some random samples
+#    samples_idx = np.random.choice(len(P_flatten), size=size, p=P_flatten)
+#    samples_idx = np.array(np.unravel_index(samples_idx, P.shape)).T
+#
+#    # Extract the random samples
+#    samples = xc[np.arange(xc.shape[0]), samples_idx]
+#    
+#    # Add some noise
+#    random_noise = np.random.uniform(low=-0.5, high=0.5, size=np.shape(samples))
+#    samples = samples + random_noise * dxc.T
+#
+#    return samples

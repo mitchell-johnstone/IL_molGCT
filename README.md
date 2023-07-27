@@ -23,12 +23,12 @@ This builds off the GCT (details below), improving the general structure and app
 # Implementation
 1. Set up your anaconda environment with the following code:
 ```
-conda env create -f molgct_env.yaml
+conda env create -f ilmolgct_env.yaml
 ```
 
 2. Activate the conda environment:
 ```
-conda activate molgct
+conda activate ilmolgct
 ```
 
 3. Train GCT:

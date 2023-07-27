@@ -52,6 +52,12 @@ def train_model(model, opt):
         history_df = pd.DataFrame(columns=["epoch", "beta", "lr", "total_loss", "RCE_mol_loss", "RCE_prop_loss", "KLD_loss"])
     history_dict = {}
 
+    if opt.load_weights is not None:
+        dst = opt.load_weights
+    else:
+        dst = opt.save_loc
+    os.makedirs(dst, exist_ok=True)
+
     beta = 0
     current_step = 0
     for epoch in tqdm(range(opt.epochs), desc="Epochs", position=0):
@@ -138,6 +144,7 @@ def train_model(model, opt):
 
                     src_mask, trg_mask = create_masks(src, trg_input, cond, opt)
                     preds_prop, preds_mol, mu, log_var, z = model(src, trg_input, cond, src_mask, trg_mask)
+                    
                     ys_mol = trg[:, 1:].contiguous().view(-1).to(opt.device)
                     ys_cond = torch.unsqueeze(cond, 2).contiguous().view(-1, opt.cond_dim, 1)
 
@@ -153,17 +160,16 @@ def train_model(model, opt):
             history_dict['RCE_prop_loss_te'] = RCE_prop_loss_te / len(opt.test.dataset)
             history_dict['KLD_loss_te'] = KLD_loss_te / len(opt.test.dataset)
             
-        history_df = history_df.append(history_dict.copy(), ignore_index=True)
+        curr = pd.DataFrame([history_dict.copy()])
+        history_df = pd.concat([history_df, curr], ignore_index=True)
 
         # Export weights every epoch
-        dst = 'weights'
-        os.makedirs(dst, exist_ok=True)
         print(f'saving weights to {dst}/...')
         torch.save(model.state_dict(), f'{dst}/model_weights')
 
     # Export train/test history
-    os.makedirs("train_history", exist_ok=True)
-    history_df.to_csv(f'./train_history/trHist_lat={opt.latent_dim}_{time.strftime("%Y%m%d")}.csv', index=False)
+    os.makedirs(f"{dst}/train_history", exist_ok=True)
+    history_df.to_csv(f'{dst}/train_history/trHist_{time.strftime("%Y%m%d")}.csv', index=False)
 
 
 def get_program_arguments():
@@ -178,11 +184,13 @@ def get_program_arguments():
     parser.add_argument('-lang_format', type=str, default='SMILES')
     calProp = not os.path.isfile("data/moses/prop_temp.csv") or not os.path.isfile("data/moses/prop_temp_te.csv")
     parser.add_argument('-calProp', type=bool, default=calProp) #if prop_temp.csv and prop_temp_te.csv exist, set False
+    
+    parser.add_argument('-tokenizer', type=str, default="smilespe")
 
     # Learning hyperparameters
     parser.add_argument('-epochs', type=int, default=25)
-    # parser.add_argument('-lr_scheduler', type=str, default="SGDR", help="WarmUpDefault, SGDR")
-    parser.add_argument('-lr_scheduler', type=str, default="WarmUpDefault", help="WarmUpDefault, SGDR")
+    parser.add_argument('-lr_scheduler', type=str, default="SGDR", help="WarmUpDefault, SGDR")
+    # parser.add_argument('-lr_scheduler', type=str, default="WarmUpDefault", help="WarmUpDefault, SGDR")
     parser.add_argument('-lr_WarmUpSteps', type=int, default=8000, help="only for WarmUpDefault")
     parser.add_argument('-lr', type=float, default=0.0001)
     parser.add_argument('-lr_beta1', type=float, default=0.9)
@@ -200,11 +208,11 @@ def get_program_arguments():
     parser.add_argument('-use_cond2dec', type=bool, default=False)
     parser.add_argument('-use_cond2lat', type=bool, default=True)
     parser.add_argument('-latent_dim', type=int, default=128)
-    parser.add_argument('-cond_dim', type=int, default=5)
+    parser.add_argument('-cond_dim', type=int, default=4)
     parser.add_argument('-d_model', type=int, default=512)
     parser.add_argument('-n_layers', type=int, default=6)
     parser.add_argument('-heads', type=int, default=8)
-    parser.add_argument('-dropout', type=int, default=0.3)
+    parser.add_argument('-dropout', type=float, default=0.3)
     parser.add_argument('-batchsize', type=int, default=256)
     # parser.add_argument('-batchsize', type=int, default=1024*8)
     parser.add_argument('-max_strlen', type=int, default=80)  # max 80
@@ -231,7 +239,7 @@ def main():
     - saving the model
     """
     opt = get_program_arguments()
-    opt.cond_labels = ["Temperature", "Pressure", "DynViscosity", "Density", "ElecConductivity"]
+    opt.cond_labels = ["Temperature", "DynViscosity", "Density", "ElecConductivity"]
     
     print("Batch size: ", opt.batchsize)
     print("implement test: ", opt.imp_test)
@@ -256,11 +264,9 @@ def main():
     if opt.lr_scheduler == "SGDR":
         opt.sched = CosineWithRestarts(opt.optimizer, T_max=opt.train_len)
 
-    # Save the tokenizer weights
-    os.makedirs('weights', exist_ok=True)
-    pickle.dump(opt.src_tok, open('weights/SRC.pkl', 'wb'))
-    pickle.dump(opt.trg_tok, open('weights/TRG.pkl', 'wb'))
-    
+    # Define save location
+    opt.save_loc = f'weights/{opt.tokenizer}_lr={opt.lr}_drop={opt.dropout}_e={opt.epochs}_b={opt.batchsize}_nl={opt.n_layers}_h={opt.heads}_d={opt.d_model}_lat={opt.latent_dim}'
+
     # train the model
     train_model(model, opt)
 
@@ -275,10 +281,17 @@ def saveModel(model, opt):
     if opt.load_weights is not None:
         dst = opt.load_weights
     else:
-        dst = 'weights'
+        dst = opt.save_loc
 
     os.makedirs(dst, exist_ok=True)
     print(f'saving weights to {dst}/...')
+    try:
+        os.remove(f'{dst}/model_weights')
+        os.remove(f'{dst}/SRC.pkl')
+        os.remove(f'{dst}/TRG.pkl')
+        os.remove(f'{dst}/scaler.pkl')
+    except:
+        pass
     torch.save(model.state_dict(), f'{dst}/model_weights')
     pickle.dump(opt.src_tok, open(f'{dst}/SRC.pkl', 'wb'))
     pickle.dump(opt.trg_tok, open(f'{dst}/TRG.pkl', 'wb'))

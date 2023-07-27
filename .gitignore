@@ -4,6 +4,7 @@ slurm*
 __pycache__
 data/moses/prop_temp*
 toklen_list.csv
-trHist*
-*.sh
+train_history/
 moses_bench*
+Regression/
+outputs/

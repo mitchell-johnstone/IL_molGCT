@@ -33,6 +33,7 @@ def init_vars(cond, model, SRC, TRG, toklen, opt, z):
     
     return outputs, e_outputs, log_scores
 
+
 def k_best_outputs(outputs, out, log_scores, i, k):
     probs, ix = out[:, -1].data.topk(k)
     log_probs = torch.Tensor([math.log(p) for p in probs.data.view(-1)]).view(k, -1) + log_scores.transpose(0,1)
@@ -47,6 +48,7 @@ def k_best_outputs(outputs, out, log_scores, i, k):
     log_scores = k_probs.unsqueeze(0)
     
     return outputs, log_scores
+
 
 def beam_search(cond, model, SRC, TRG, toklen, opt, z):
     cond = cond.to(opt.device)

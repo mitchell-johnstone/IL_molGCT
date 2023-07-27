@@ -6,25 +6,26 @@ import os
 
 def checkdata(opt):
     # fpath = "data/moses/prop_temp.csv"
-    results = pd.read_csv(opt.load_traindata)
+    results = pd.read_csv(opt.load_data)
 
-    num_conds = len(opt.cond_labels)
-    figure, axs = plt.subplots(nrows=1, ncols=num_conds)
+    figure, axs = plt.subplots(nrows=1, ncols=opt.cond_dim, figsize=(10,4), constrained_layout=True)
+    
+    units = ["Kelvin", "Pa•s", "kg/m3", "S/m"]
 
     ret = []
     for i, (label, ax) in enumerate(zip(opt.cond_labels, axs)):
         sns.violinplot(y=label, data=results, ax=ax, color=sns.color_palette()[i])
-        ax.set(xlabel=label, ylabel='')
+        ax.set(xlabel=label, ylabel=units[i])
         quantiles = get_quantiles(results[label])
-        for quantile in quantiles: # every quantile
-            text = ax.text(0, quantile, f'{quantile:.2f}', ha='right', va='center', fontweight='bold', size=10, color='white')
-            text.set_path_effects([path_effects.Stroke(linewidth=3, foreground='black'), path_effects.Normal()])
+        # for quantile in quantiles: # every quantile
+        #     text = ax.text(0, quantile, f'{quantile:.2f}', ha='right', va='center', fontweight='bold', size=10, color='white')
+        #     text.set_path_effects([path_effects.Stroke(linewidth=3, foreground='black'), path_effects.Normal()])
         # record max/min of the values
         ret.append((max(quantiles[-1], results[label].min()), min(quantiles[0], results[label].max())))
 
     plt.show()
     os.makedirs("figures", exist_ok=True)
-    figure.savefig("figures/Property_Boundaries.png", dpi=300, bbox_inches='tight')
+    figure.savefig("figures/Property_Boundaries.png", dpi=300)#, bbox_inches='tight')
     return ret
 
 
